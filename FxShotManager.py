@@ -123,8 +123,31 @@ try:
     import numpy as np
     HAS_OPENCV = True
 except ImportError as e:
-    HAS_OPENCV = False
-    print(f"Warning: OpenCV (cv2) or NumPy could not be loaded: {e}. Thumbnail resizing will be skipped.")
+    print("OpenCV or NumPy not found. Attempting automatic installation...")
+    try:
+        import subprocess
+        lib_dir = os.path.join(script_dir, "lib")
+        os.makedirs(lib_dir, exist_ok=True)
+        
+        # Run pip install targeting the lib_dir
+        subprocess.check_call([
+            sys.executable, "-m", "pip", "install",
+            "--target", lib_dir,
+            "numpy>=1.20.0",
+            "opencv-python-headless>=4.5.0"
+        ])
+        
+        # Add to sys.path if not already present
+        if lib_dir not in sys.path:
+            sys.path.insert(0, lib_dir)
+            
+        import cv2
+        import numpy as np
+        HAS_OPENCV = True
+        print("Successfully installed and loaded OpenCV and NumPy!")
+    except Exception as install_err:
+        HAS_OPENCV = False
+        print(f"Warning: OpenCV (cv2) or NumPy could not be loaded/installed: {install_err}. Thumbnail resizing will be skipped.")
 
 def resize_image_opencv(image_path, target_width=720):
     """Resizes an image to target_width if it exceeds it, maintaining aspect ratio."""
