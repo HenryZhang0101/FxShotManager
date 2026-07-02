@@ -300,7 +300,7 @@ def update_shot_vfx_marker(shot):
         if shot.difficulty:
             keywords.append(f"Difficulty: {shot.difficulty}")
         
-        keyword_line = f"{'\n'.join(keywords)}" if keywords else ""
+        keyword_line = "\n".join(keywords) if keywords else ""
         
         if shot.notes and keyword_line:
             marker_note = f"{keyword_line}\n{shot.notes}"
