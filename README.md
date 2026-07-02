@@ -10,19 +10,19 @@ Clone the repository directly into DaVinci Resolve's utility scripts path for yo
   ```bash
   git clone https://github.com/HenryZhang0101/FxShotManager.git "C:\ProgramData\Blackmagic Design\DaVinci Resolve\Fusion\Scripts\Utility\FxShotManager"
   cd "C:\ProgramData\Blackmagic Design\DaVinci Resolve\Fusion\Scripts\Utility\FxShotManager"
-  pip install -r requirements.txt
+  pip install -r requirements.txt --target lib
   ```
 - **macOS**:
   ```bash
   git clone https://github.com/HenryZhang0101/FxShotManager.git "/Library/Application Support/Blackmagic Design/DaVinci Resolve/Fusion/Scripts/Utility/FxShotManager"
   cd "/Library/Application Support/Blackmagic Design/DaVinci Resolve/Fusion/Scripts/Utility/FxShotManager"
-  pip install -r requirements.txt
+  pip install -r requirements.txt --target lib
   ```
 - **Linux**:
   ```bash
   git clone https://github.com/HenryZhang0101/FxShotManager.git "/opt/resolve/Fusion/Scripts/Utility/FxShotManager"
   cd "/opt/resolve/Fusion/Scripts/Utility/FxShotManager"
-  pip install -r requirements.txt
+  pip install -r requirements.txt --target lib
   ```
 ## Updating
 
@@ -32,19 +32,19 @@ To update the script to the latest version, navigate to the folder for your oper
   ```bash
   cd "C:\ProgramData\Blackmagic Design\DaVinci Resolve\Fusion\Scripts\Utility\FxShotManager"
   git pull
-  pip install -r requirements.txt
+  pip install -r requirements.txt --target lib
   ```
 - **macOS**:
   ```bash
   cd "/Library/Application Support/Blackmagic Design/DaVinci Resolve/Fusion/Scripts/Utility/FxShotManager"
   git pull
-  pip install -r requirements.txt
+  pip install -r requirements.txt --target lib
   ```
 - **Linux**:
   ```bash
   cd "/opt/resolve/Fusion/Scripts/Utility/FxShotManager"
   git pull
-  pip install -r requirements.txt
+  pip install -r requirements.txt --target lib
   ```
 
 ## Usage
