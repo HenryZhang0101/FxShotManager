@@ -126,12 +126,44 @@ except ImportError as e:
     print("OpenCV or NumPy not found. Attempting automatic installation...")
     try:
         import subprocess
+        import shutil
+        
+        # Find the correct python executable, as sys.executable may point to Resolve/Fusion
+        python_exe = None
+        exe = sys.executable
+        if exe:
+            basename = os.path.basename(exe).lower()
+            if "python" in basename and not any(x in basename for x in ["resolve", "fusion", "fuscript"]):
+                python_exe = exe
+        
+        if not python_exe and sys.exec_prefix:
+            if sys.platform == "win32":
+                candidate = os.path.join(sys.exec_prefix, "python.exe")
+                if os.path.exists(candidate):
+                    python_exe = candidate
+            else:
+                for bin_name in ["python3", "python"]:
+                    candidate = os.path.join(sys.exec_prefix, "bin", bin_name)
+                    if os.path.exists(candidate):
+                        python_exe = candidate
+                        break
+        
+        if not python_exe:
+            for cmd in ["python", "python3", "py"]:
+                path = shutil.which(cmd)
+                if path:
+                    python_exe = path
+                    break
+                    
+        if not python_exe:
+            python_exe = "python" if sys.platform == "win32" else "python3"
+
         lib_dir = os.path.join(script_dir, "lib")
         os.makedirs(lib_dir, exist_ok=True)
         
         # Run pip install targeting the lib_dir
         subprocess.check_call([
-            sys.executable, "-m", "pip", "install",
+            python_exe, "-m", "pip", "install",
             "--target", lib_dir,
             "numpy>=1.20.0",
             "opencv-python-headless>=4.5.0"
