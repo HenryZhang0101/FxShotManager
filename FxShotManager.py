@@ -321,7 +321,7 @@ def update_shot_vfx_marker(shot):
         if not final_id:
             return False
             
-        marker_name = f"XS_{final_id}"
+        marker_name = f"{final_id}"
         marker_color = "Green" if shot.status and shot.status.lower() == "approved" else "Lemon"
         
         keywords = []
