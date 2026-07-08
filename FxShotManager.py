@@ -408,6 +408,7 @@ layout = ui.VGroup({"Spacing": 10}, [
     
     ui.HGroup({"Spacing": 10, "Weight": 0}, [
         ui.Button({"ID": "import_csv_btn", "Text": "Import CSV", "Weight": 1}),
+        ui.Button({"ID": "import_edl_btn", "Text": "Import EDL Markers", "Weight": 1}),
         ui.Button({"ID": "export_csv_btn", "Text": "Export CSV", "Weight": 1}),
         ui.Button({"ID": "export_excel_btn", "Text": "Export Excel", "Weight": 1}),
         ui.Button({"ID": "export_thumb_btn", "Text": "Export Thumbnails", "Weight": 1}),
@@ -1140,6 +1141,205 @@ def on_import_csv(ev):
     except Exception as e:
         print(f"Failed to import CSV: {e}")
 
+def on_import_edl(ev):
+    file_path = request_file(title="Open EDL Markers File", mode="open", ext_filter="EDL Files (*.edl)", default_ext=".edl")
+    if not file_path:
+        return
+        
+    if not os.path.exists(file_path):
+        print(f"File not found: {file_path}")
+        return
+        
+    try:
+        global master_data
+        
+        # 1. Parse EDL
+        edl_records = []
+        timeline_name = ""
+        
+        with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
+            lines = f.readlines()
+            
+        i = 0
+        while i < len(lines):
+            line = lines[i].strip()
+            if not line:
+                i += 1
+                continue
+                
+            if line.startswith("TITLE:"):
+                timeline_name = line[6:].strip()
+                i += 1
+                continue
+                
+            tokens = line.split()
+            if len(tokens) >= 8 and tokens[0].isdigit() and tokens[2] in ('V', 'A'):
+                meta_line = ""
+                j = i + 1
+                while j < len(lines):
+                    if lines[j].strip():
+                        meta_line = lines[j].strip()
+                        break
+                    j += 1
+                    
+                if meta_line:
+                    parts = [p.strip() for p in meta_line.split("|")]
+                    note = parts[0] if parts else ""
+                    
+                    color = ""
+                    raw_shot_id = ""
+                    duration_str = ""
+                    
+                    for part in parts[1:]:
+                        if part.startswith("C:"):
+                            color = part[2:]
+                        elif part.startswith("M:"):
+                            raw_shot_id = part[2:]
+                        elif part.startswith("D:"):
+                            duration_str = part[2:]
+                            
+                    # Format shot ID (e.g. R02-010 -> R02_0010)
+                    formatted_id = ""
+                    if raw_shot_id:
+                        import re
+                        if "-" in raw_shot_id:
+                            p = raw_shot_id.split("-", 1)
+                            seq = p[0]
+                            num_str = p[1]
+                            m = re.match(r"^(\d+)(.*)$", num_str)
+                            if m:
+                                num = int(m.group(1))
+                                suffix = m.group(2)
+                                formatted_id = f"{seq}_{num:04d}{suffix}"
+                            else:
+                                formatted_id = f"{seq}_{num_str}"
+                        else:
+                            formatted_id = raw_shot_id
+                            
+                    start_tc = tokens[6]
+                    
+                    edl_records.append({
+                        "shot_id": formatted_id,
+                        "notes": note,
+                        "start_tc": start_tc,
+                        "duration": duration_str,
+                        "timeline": timeline_name
+                    })
+                    i = j + 1
+                    continue
+            i += 1
+            
+        if not edl_records:
+            print("No marker records found in the selected EDL file.")
+            return
+            
+        # 2. Get Resolve Project/Timeline to look up clip names and framerates
+        projectManager = resolve.GetProjectManager()
+        project = projectManager.GetCurrentProject() if projectManager else None
+        
+        # We can cache timeline objects
+        timeline_cache = {}
+        if project:
+            # Try to populate timeline cache
+            for idx in range(1, int(project.GetTimelineCount()) + 1):
+                t = project.GetTimelineByIndex(idx)
+                timeline_cache[t.GetName()] = t
+                
+        imported_count = 0
+        for rec in edl_records:
+            shot_id = rec["shot_id"]
+            notes = rec["notes"]
+            start_tc = rec["start_tc"]
+            dur = rec["duration"]
+            t_name = rec["timeline"]
+            
+            # Find timeline and framerate/clip details
+            fps = 24.0
+            clip_name = ""
+            end_tc = ""
+            
+            tl = timeline_cache.get(t_name)
+            if tl:
+                try:
+                    fps = float(tl.GetSetting("timelineFrameRate"))
+                except:
+                    pass
+                    
+                # Look up clip name at this timecode
+                try:
+                    target_frame = timecode_to_frame(start_tc, fps)
+                    track_count = tl.GetTrackCount('video')
+                    for trk_idx in range(1, track_count + 1):
+                        if not tl.GetIsTrackEnabled('video', trk_idx):
+                            continue
+                        items = tl.GetItemListInTrack('video', trk_idx)
+                        if not items:
+                            continue
+                        found_clip = False
+                        for item in items:
+                            if not item.GetClipEnabled():
+                                continue
+                            if item.GetStart() <= target_frame < item.GetEnd():
+                                clip_name = item.GetName()
+                                found_clip = True
+                                break
+                        if found_clip:
+                            break
+                except Exception as e:
+                    print(f"Error resolving clip name from timeline for shot {shot_id}: {e}")
+            
+            # Calculate end timecode if possible
+            if start_tc and dur:
+                try:
+                    frames_start = timecode_to_frame(start_tc, fps)
+                    frames_end = frames_start + int(dur)
+                    end_tc = frame_to_timecode(frames_end, fps)
+                except Exception as e:
+                    print(f"Error calculating end timecode for {shot_id}: {e}")
+                    
+            # Check if this shot_id already exists in master_data
+            existing_shot = None
+            for shot in master_data:
+                if shot.shot_id == shot_id and shot.timeline == t_name:
+                    existing_shot = shot
+                    break
+                    
+            if existing_shot:
+                # Update existing shot details from EDL
+                existing_shot.notes = notes
+                existing_shot.start_tc = start_tc
+                existing_shot.end_tc = end_tc
+                existing_shot.duration = dur
+                if clip_name:
+                    existing_shot.name = clip_name
+            else:
+                # Create a new ShotRecord
+                new_shot = ShotRecord(
+                    shot_id=shot_id,
+                    name=clip_name,
+                    thumb="",
+                    dur=dur,
+                    start=start_tc,
+                    end=end_tc,
+                    status="",
+                    assign="",
+                    diff="",
+                    prior="",
+                    notes=notes,
+                    timeline=t_name
+                )
+                master_data.append(new_shot)
+            imported_count += 1
+            
+        refresh_tree()
+        auto_save_session()
+        print(f"Imported {imported_count} shots from EDL '{file_path}' into timeline '{timeline_name}'")
+        
+    except Exception as e:
+        print(f"Failed to import EDL: {e}")
+        import traceback
+        traceback.print_exc()
+
 def on_export_csv(ev):
     file_path = request_file(title="Save as CSV", mode="save")
     if not file_path:
@@ -1826,7 +2026,14 @@ def on_export_clips_clicked(ev):
                     if trk_idx != c['track_idx']:
                         curr_timeline.SetTrackEnable('video', trk_idx, False)
 
-                file_name = f"{global_proj_name}_{c['shot'].shot_id}_{c['identifier']}_{global_version}"
+                name_parts = []
+                if global_proj_name:
+                    name_parts.append(global_proj_name)
+                name_parts.append(c['shot'].shot_id)
+                name_parts.append(c['identifier'])
+                if global_version:
+                    name_parts.append(global_version)
+                file_name = "_".join(name_parts)
                 
                 settings = {
                     "MarkIn": c['s_frame'],
@@ -1874,6 +2081,7 @@ win.On["batch_edit_btn"].Clicked = on_batch_edit_clicked
 win.On["delete_btn"].Clicked = on_delete_clicked
 win.On["refresh_btn"].Clicked = add_current_clip
 win.On["import_csv_btn"].Clicked = on_import_csv
+win.On["import_edl_btn"].Clicked = on_import_edl
 win.On["export_csv_btn"].Clicked = on_export_csv
 win.On["export_excel_btn"].Clicked = on_export_excel_clicked
 win.On["export_thumb_btn"].Clicked = on_export_thumbs
